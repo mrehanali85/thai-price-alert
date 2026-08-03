@@ -31,7 +31,7 @@ DATES = [
 ADULTS = 1
 CHILDREN = 1  # age 3
 CURRENCY = "PKR"
-AIRLINE_CODE = "TG"  # Thai Airways only. Set to None to see all airlines.
+AIRLINE_CODE = None  # None = all airlines. Set to e.g. "TG" to filter to one airline only.
 
 SERPAPI_URL = "https://serpapi.com/search"
 STATE_FILE = "state.json"
