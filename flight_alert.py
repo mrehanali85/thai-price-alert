@@ -21,8 +21,13 @@ from datetime import date, timedelta
 # ---- CONFIG ----------------------------------------------------------
 ORIGIN = "KHI"
 DESTINATION = "KUL"
-START_DATE = date(2026, 8, 2)
-END_DATE = date(2026, 8, 9)
+DATES = [
+    date(2026, 8, 4),
+    date(2026, 8, 6),
+    date(2026, 8, 7),
+    date(2026, 8, 8),
+    date(2026, 8, 9),
+]
 ADULTS = 1
 CHILDREN = 1  # age 3
 CURRENCY = "PKR"
@@ -66,14 +71,12 @@ def search_flights(departure_date):
 def find_cheapest_across_range():
     best_price = None
     best_date = None
-    day = START_DATE
-    while day <= END_DATE:
+    for day in DATES:
         price = search_flights(day)
         print(f"  {day}: {price if price is not None else 'no offers found'}")
         if price is not None and (best_price is None or price < best_price):
             best_price = price
             best_date = day
-        day += timedelta(days=1)
     return best_price, best_date
 
 
@@ -98,7 +101,7 @@ def send_telegram(message):
 
 
 def main():
-    print(f"Checking prices {START_DATE} to {END_DATE} for {ORIGIN}->{DESTINATION} "
+    print(f"Checking prices on {DATES} for {ORIGIN}->{DESTINATION} "
           f"({ADULTS} adult, {CHILDREN} child, airline={AIRLINE_CODE or 'any'})...")
     price, dep_date = find_cheapest_across_range()
 
