@@ -60,24 +60,43 @@ def search_flights(departure_date):
         return None
 
     data = resp.json()
-    flights = (data.get("best_flights") or []) + (data.get("other_flights") or [])
-    if not flights:
+    offers = (data.get("best_flights") or []) + (data.get("other_flights") or [])
+    if not offers:
         return None
 
-    prices = [f["price"] for f in flights if f.get("price")]
-    return min(prices) if prices else None
+    # find the cheapest offer, and pull the airline name from its first leg
+    cheapest = min(
+        (o for o in offers if o.get("price")),
+        key=lambda o: o["price"],
+        default=None,
+    )
+    if cheapest is None:
+        return None
+
+    legs = cheapest.get("flights") or []
+    airline = legs[0]["airline"] if legs and legs[0].get("airline") else "Unknown"
+    if len(legs) > 1:
+        airline += " (connecting)"
+
+    total_minutes = cheapest.get("total_duration")  # in minutes
+    if total_minutes:
+        duration = f"{total_minutes // 60}h {total_minutes % 60}m"
+    else:
+        duration = "Unknown"
+
+    return {"price": cheapest["price"], "airline": airline, "duration": duration}
 
 
 def find_cheapest_across_range():
-    best_price = None
+    best = None
     best_date = None
     for day in DATES:
-        price = search_flights(day)
-        print(f"  {day}: {price if price is not None else 'no offers found'}")
-        if price is not None and (best_price is None or price < best_price):
-            best_price = price
+        result = search_flights(day)
+        print(f"  {day}: {result if result is not None else 'no offers found'}")
+        if result is not None and (best is None or result["price"] < best["price"]):
+            best = result
             best_date = day
-    return best_price, best_date
+    return best, best_date
 
 
 def load_last_price():
@@ -87,9 +106,12 @@ def load_last_price():
     return None
 
 
-def save_price(price, dep_date):
+def save_price(price, airline, duration, dep_date):
     with open(STATE_FILE, "w") as f:
-        json.dump({"price": price, "date": dep_date.isoformat()}, f)
+        json.dump(
+            {"price": price, "airline": airline, "duration": duration, "date": dep_date.isoformat()},
+            f,
+        )
 
 
 def send_telegram(message):
@@ -103,32 +125,37 @@ def send_telegram(message):
 def main():
     print(f"Checking prices on {DATES} for {ORIGIN}->{DESTINATION} "
           f"({ADULTS} adult, {CHILDREN} child, airline={AIRLINE_CODE or 'any'})...")
-    price, dep_date = find_cheapest_across_range()
+    result, dep_date = find_cheapest_across_range()
 
-    if price is None:
+    if result is None:
         print("No offers found for any date in range. Skipping alert.")
         return
 
+    price = result["price"]
+    airline = result["airline"]
+    duration = result["duration"]
     last = load_last_price()
-    print(f"Cheapest found: {CURRENCY} {price} on {dep_date}")
+    print(f"Cheapest found: {CURRENCY} {price} on {dep_date} ({airline}, {duration})")
 
     if last is None:
         send_telegram(
             f"✈️ Price tracking started for {ORIGIN}->{DESTINATION}\n"
             f"Cheapest so far: {CURRENCY} {price:.0f} on {dep_date}\n"
-            f"(1 adult + 1 child, {START_DATE} to {END_DATE})"
+            f"Airline: {airline}\n"
+            f"Duration: {duration}\n"
+            f"(1 adult + 1 child)"
         )
     elif abs(last["price"] - price) > 0.01:
         direction = "🔻 dropped" if price < last["price"] else "🔺 increased"
         send_telegram(
             f"{direction}: {ORIGIN}->{DESTINATION}\n"
-            f"Old: {CURRENCY} {last['price']:.0f}\n"
-            f"New: {CURRENCY} {price:.0f} on {dep_date}"
+            f"Old: {CURRENCY} {last['price']:.0f} ({last.get('airline', 'unknown')})\n"
+            f"New: {CURRENCY} {price:.0f} ({airline}, {duration}) on {dep_date}"
         )
     else:
         print("No price change since last check.")
 
-    save_price(price, dep_date)
+    save_price(price, airline, duration, dep_date)
 
 
 if __name__ == "__main__":
